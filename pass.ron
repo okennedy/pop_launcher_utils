@@ -1,7 +1,7 @@
 (
-    name: "Pop Pass",
+    name: "Pass Password Manager",
     description: "Syntax: pass [account]",
-    bin: (path: "pop_pass"),
+    bin: (path: "pass"),
     icon: Name("dialog-password"),
     query: (
         regex: "^pass\\s.*",

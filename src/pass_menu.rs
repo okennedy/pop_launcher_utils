@@ -1,7 +1,8 @@
 use std::vec::Vec;
-use crate::pass::PassList;
+use crate::pass_lib::PassList;
 use crate::launcher::{self, PluginSearchResult};
 use std::process::Command;
+use num_derive::FromPrimitive;
 
 pub struct MenuItem
 {
@@ -13,6 +14,13 @@ pub struct Menu
 {
   entries: Vec<MenuItem>
 } 
+
+#[derive(FromPrimitive)]
+enum ContextAction
+{
+  Copy = 1,
+  Edit,
+}
 
 impl Menu
 {
@@ -92,6 +100,7 @@ impl Menu
   {
     let idx = usize::try_from(id)
                     .map_err(|_err| "Invalid index")?;
+    if idx >= self.entries.len() { return Err(String::from("Invalid index")) }
     let entry = &self.entries[idx];
 
     Command::new("pass")
@@ -102,4 +111,48 @@ impl Menu
 
     Ok(())
   }
+
+  pub fn edit(&self, id: u32) -> Result<(),String>
+  {
+    let idx = usize::try_from(id)
+                    .map_err(|_err| "Invalid index")?;
+    if idx >= self.entries.len() { return Err(String::from("Invalid index")) }
+    let entry = &self.entries[idx];
+
+    Command::new("pass")
+            .arg("edit")
+            .arg(entry.full_name.as_str())
+            .spawn()
+            .map_err(|err| err.to_string())?;
+
+    Ok(())
+  }
+
+  pub fn context(&self, _id: u32) -> Vec<launcher::ContextOption>
+  {
+    let mut ret:Vec<launcher::ContextOption> = Vec::new();
+    ret.push(launcher::ContextOption{
+      id: ContextAction::Copy as u32,
+      name: String::from("Copy")
+    });
+    ret.push(launcher::ContextOption{
+      id: ContextAction::Edit as u32,
+      name: String::from("Edit")
+    });
+    return ret
+  }
+
+
+  pub fn activate_context(&self, id: u32, action: u32) -> Result<(), String>
+  {
+    match num::FromPrimitive::from_u32(action)
+    {
+      Some(ContextAction::Copy) => self.activate(id)?,
+      Some(ContextAction::Edit) => self.edit(id)?,
+      None => return Err(String::from("Invalid context action"))
+    }
+
+    Ok(())
+  }
 }
+

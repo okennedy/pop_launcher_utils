@@ -1,0 +1,11 @@
+(
+    name: "Todo",
+    description: "Syntax: todo [task]",
+    bin: (path: "todo"),
+    icon: Name("task-due"),
+    query: (
+        regex: "^todo\\s.*",
+        isolate: true,
+        help: "todo",
+    )
+)

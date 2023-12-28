@@ -1,77 +1,80 @@
 
-use std::vec::Vec;
-use std::option::Option;
-use std::fs;
+mod launcher;
+mod pass_lib;
+mod pass_menu;
+
+
 use std::io;
-use std::path::Path;
-use std::env;
+use pass_menu::Menu;
+use launcher::{ Request, PluginResponse };
+use std::result::Result;
 
-pub type PassList = Vec<PassEntry>;
-
-pub struct PassEntry
+fn respond(response: &PluginResponse) -> io::Result<()>
 {
-  pub name: String,
-  pub children: Option<PassList>
+  let encoded = serde_json::to_string(&response)?;
+  print!("{}\n", encoded);
+  Ok(())
 }
 
-fn list_dir(dir: &Path) -> io::Result<PassList>
+fn process_request(request_str: &String, menu: &Menu) -> Result<bool, String> 
 {
-  let mut list:PassList = Vec::new();
+  let request: Request = serde_json::from_str(&request_str).map_err(|err| err.to_string())?;
 
-  for entry in fs::read_dir(dir)?
-  {
-    let entry = entry?.path();
-    if entry.is_dir() 
-    {
-      match entry.file_stem()
-                 .and_then( |x| x.to_str() )
-      {
-        None => (),
-        Some(filename) =>
-          list.push(
-            PassEntry { 
-              name: String::from(filename),
-              children: Some(list_dir(&entry.as_path())?)
-            }
-          )
-
-      }      
-    } else if entry.extension()
-                   .and_then( |x| x.to_str() )
-                   .unwrap_or(&"nogo") == "gpg"
-    {
-      match entry.file_stem()
-                 .and_then( |x| x.to_str() )
-      {
-        None => (),
-        Some(filename) => 
-          list.push(
-            PassEntry { 
-              name: String::from(filename),
-              children: None
-            }
-          )
-
-      }
+  match request {
+    Request::Activate(id) => {
+      respond(&PluginResponse::Close).map_err(|err| err.to_string())?;
+      menu.activate(id)?;
     }
-
+    Request::ActivateContext { id, context } => 
+      menu.activate_context(id, context)?,
+    Request::Complete(_id) => 
+      (),
+    Request::Context(id) => 
+      respond(
+        &PluginResponse::Context { 
+          id: id, 
+          options: menu.context(id) 
+        }
+      ).map_err(|err| err.to_string())?,
+    Request::Exit => {
+      return Ok(false);
+    } 
+    Request::Interrupt => 
+      (),
+    Request::Quit(_id) => 
+      (),
+    Request::Search(term) => {
+      for entry in menu.search(term.trim_start_matches("pass "))
+      {
+        respond(&PluginResponse::Append(entry)).map_err(|err| err.to_string())?
+      }
+      respond(&PluginResponse::Finished).map_err(|err| err.to_string())?
+    }
   }
 
-  return Ok(list)
+  Ok(true)
 }
 
-pub fn ls() -> io::Result<PassList>
-{
-  // home_dir has a deprecation warning because it is broken on
-  // windows... but PopOS is linux only. 
-  #[allow(deprecated)]
-  let mut dir = 
-    match env::home_dir() {
-      Some(dir) => dir,
-      None => return Err(io::Error::new(io::ErrorKind::NotFound, "Can't find Password Directory (no home directory)"))
-    };
 
-  dir.push(".password-store");
+fn main() -> Result<(), String> {
+  let mut keep_going = true;
 
-  Ok(list_dir(&dir.as_path())?)
+  let mut buffer = String::new();
+  let stdin = io::stdin();
+
+  let passwords = pass_lib::ls().map_err(|err| err.to_string())?;
+  let menu = Menu::build(passwords);
+
+  while keep_going {
+    if stdin.read_line(&mut buffer).map_err(|err| err.to_string())? > 0
+    {
+      keep_going = process_request(&buffer, &menu).map_err(|err| err.to_string())?;
+      buffer.clear();
+    } else {
+      keep_going = false;
+    }
+  }
+
+
+  Ok(())
 }
