@@ -111,7 +111,7 @@ fn gen_caldav(todo: &Todo, uuid: Uuid) -> String
   let due = match &todo.due 
             {
               None => "".to_string(),
-              Some(due) => format!("DUE:{}\n", due.format("%Y%m%dT000000").to_string())
+              Some(due) => format!("DUE:{}\n", due.format("%Y%m%dT190000").to_string())
             };
 
   let mut caldav = String::new();
